@@ -1,0 +1,146 @@
+---
+title: "Data Cleaning"
+author: "Sara Hassani"
+date: "2025-04-22"
+output: pdf_document
+---
+
+```{r}
+library(readxl)
+library(dplyr)
+```
+
+### Demographic Snapshot
+
+```{r}
+demographics = read.csv("2017-18 2021-22 Demographic_Snapshot.csv")
+dem = read.csv("demographic.csv")
+columns = colnames(demographics)
+col = colnames(dem)
+
+variables = c(columns[1:4], "3k", col[7:20], "female_num", "female_per", "male_num", "male_per", col[27:32], "multirace_num", "multirace_per", "native_num", "native_per", "white_num", "white_per", col[39:42], "ell_num", col[43:46])
+colnames(demographics) = variables
+
+demographics$Year = as.numeric(substr(demographics$Year, 1, 4))
+demographics$poverty_per[demographics$poverty_per == "Above 95%"] = "97.5%"
+demographics$economic.index[demographics$economic.index == "Above 95%"] = "97.5%"
+demographics$poverty_num[demographics$poverty_num == "Above 95%"] = round(0.975*demographics$Total.Enrollment[demographics$poverty_num == "Above 95%"], digits = 0)
+demographics$economic.index = as.numeric(substr(demographics$economic.index, 1, 4))
+demographics$poverty_per = as.numeric(substr(demographics$poverty_per, 1, 4))
+
+for(i in 3:44){
+  demographics[,i] = as.numeric(demographics[,i])
+}
+
+```
+
+### Maths Test Results (as proxy for academic success)
+
+```{r}
+
+math = read_excel("04_school-math-results-2013-2023-(public).xlsx", sheet = 2)
+
+for (i in 3:7){
+  data = read_excel("04_school-math-results-2013-2023-(public).xlsx", sheet = i)
+  math = full_join(math, data)
+}
+
+for(i in 6:17){
+  temp = math[,i]
+  temp = sapply(temp, as.numeric)
+  temp = round(temp, digits = 2)
+  math[,i] = temp
+}
+
+rm(list = setdiff(ls(), c("demographics", "math")))
+
+```
+
+### Survey Results
+
+- In 2016, the change is new and the categories are all NA because missing key metrics in calculating scores.
+
+- In 2020, all scoring paused because of COVID conditions.
+
+```{r}
+survey = read_excel("2019-public-data-file_teacher.xlsx", sheet = 1)
+survey = survey[-c(1,2),]
+
+for(i in 3:11){
+  temp = survey[,i]
+  temp = sapply(temp, as.numeric)
+  temp = round(temp, digits = 2)
+  survey[,i] = temp
+}
+
+survey$Year = 2019
+
+add = read_excel("2018-public-data-file_parent.xlsx", sheet = 1)
+add = add[-1,]
+
+for(i in 3:11){
+  temp = add[,i]
+  temp = sapply(temp, as.numeric)
+  temp = round(temp, digits = 2)
+  add[,i] = temp
+}
+
+add$Year = 2018
+
+survey = full_join(survey, add)
+
+add = read_excel("2017publicdatafileparent.xlsx", sheet = 1)
+add = add[-c(1,2),]
+
+for(i in 3:11){
+  temp = add[,i]
+  temp = sapply(temp, as.numeric)
+  temp = round(temp, digits = 2)
+  add[,i] = temp
+}
+
+add$Year = 2017
+
+survey = full_join(survey, add)
+
+rm(list = setdiff(ls(), c("demographics", "math", "survey")))
+
+```
+
+### Master Dataframe
+
+```{r}
+ALL = merge(demographics, math, by = c("Year", "DBN"))
+ALL = merge(ALL, survey, by = c("Year", "DBN"))
+ALL = ALL[, colMeans(is.na(ALL)) < 0.6]
+ALL = ALL[,-c(45,60)]
+
+ALL = na.omit(ALL) # entries with no maths exam performance removed because this is the dependent variable
+
+# Specifying the borough location
+borough = rep(NA, nrow(ALL))
+index = grepl("M", ALL$DBN)
+borough[index] = "Manhattan"
+
+index = grepl("Q", ALL$DBN)
+borough[index] = "Queens"
+
+index = grepl("K", ALL$DBN)
+borough[index] = "Brooklyn"
+
+index = grepl("X", ALL$DBN)
+borough[index] = "Bronx"
+
+index = is.na(borough)
+borough[index] = "Rhode Island"
+
+ALL$borough = borough
+
+write.csv(ALL ,"master_data.csv")
+
+```
+
+
+
+
+
